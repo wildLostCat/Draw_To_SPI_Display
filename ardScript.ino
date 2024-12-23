@@ -2,12 +2,13 @@
 #include <TFT_eSPI.h>
 #include <stdlib.h>
 #include <vector>
+#include <ArduinoJson.h>
+
 
 // 320x240
 #define WIDTH 320
 #define HEIGHT 240
-#define BALL_RADIUS 5
-#define BALL_COUNT 10
+#define BALL_RADIUS 3
 #define MAX_BUFF_LEN 255
 
 
@@ -16,6 +17,8 @@ class Ball{
     int x;
     int y;
     int r = BALL_RADIUS;
+    int32_t ball_color = TFT_PINK;
+    
 
     Ball(int x_cord, int y_cord){
       x = x_cord;
@@ -24,6 +27,7 @@ class Ball{
 };
 
 
+JsonDocument doc;
 TFT_eSPI tft = TFT_eSPI();
 std::vector<Ball> positions;
 char c;
@@ -32,7 +36,7 @@ int idx = 0;
 
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(921600);
   
 
   tft.init();
@@ -42,31 +46,26 @@ void setup() {
   tft.fillScreen(TFT_WHITE);
 }
 
-bool reading_x = true; 
+
 void loop() {
-
   if (Serial.available()>0){
-    c = Serial.read();
-    // if (c == 'c'){
-    //   positions.clear();
-    // }
-    if (c != '\n'){ //Get input
-      str[idx++] = c;
-    }
-    else {
-      str[idx] = '\0';
-      idx = 0;
+    deserializeJson(doc, Serial);
+    
 
-      //Filter the input
-      //clear display
-      if (str[0] == 'c'){
+    for (int i=0; i<doc.size(); i++){
+      if (doc[0] == "c"){
         positions.clear();
-        drawCircles();
+        break;
       }
       else{
-        writeNewPos();
+        int x = doc[i][0];
+        int y = doc[i][1];
+        positions.push_back(Ball(x, y));
       }
     }
+    
+    doc.clear();
+    drawCircles();
   }
 }
 
@@ -78,51 +77,10 @@ void drawCircles(){
       int y = positions[ball].y;
       int r = positions[ball].r;
 
-      tft.fillCircle(x, y, r, TFT_VIOLET);
+      tft.fillCircle(x, y, r, positions[ball].ball_color);
     }
   else{
     tft.fillScreen(TFT_WHITE);
   }
 }
 
-
-void genPositions(){
-  for (int ball = 0; ball<BALL_COUNT; ball++){
-    int x = random(WIDTH);
-    int y = random(HEIGHT);
-
-    positions.push_back(Ball(x, y));
-  }
-}
-
-void writeNewPos(){
-  //New Circle positions
-  String x;
-  String y;
-  bool reading_x;
-  for (int i=0; i<MAX_BUFF_LEN; i++){ 
-    if (str[i] == '\0' || str[i] == '\n'){
-      break;
-    }
-
-    if (str[i]=='x'){
-      reading_x = true;
-      continue;
-    }
-    else if (str[i]=='y'){
-      reading_x = false;
-      continue;
-    }
-
-    if (reading_x){
-      x += str[i];
-    }
-    else{
-      y += str[i];
-    }
-  }
-
-  positions.push_back(Ball(x.toInt(), y.toInt()));
-  drawCircles();  
-  // delay(500);
-}

@@ -1,18 +1,21 @@
 import pygame as pg
 import serial
+import json
+import threading
+import time
 
 
 #Scales
 WIDTH = 320
 HEIGHT = 240
-BALL_RADIUS = 5
-# BALL_COUNT = 100
+BALL_RADIUS = 3
 MAX_BUFF_SIZE = 255
 FPS = 60
 
 
 # COLORS
 BLACK = (0, 0, 0)
+BALL_COLOR = (230, 0, 0)
 
 #pygame init
 pg.init()
@@ -23,49 +26,66 @@ screen = pg.display.set_mode((WIDTH, HEIGHT))
 
 #Serial init
 controller = serial.Serial(
-    port="COM6",
-    baudrate=9600,
-    timeout=1,
-    write_timeout=1
+  port="COM6",
+  baudrate=921600,
+  timeout=1,
+  write_timeout=1
 )
 
 #Balls
 ball_positions = set()
 
 
-def write_positions(positions) -> None:
-    for ball in positions:
-        string = f"x{ball[0]}y{ball[1]}\n"
-        controller.write(string.encode())
+def updatePositions(pos: tuple, positions: set) -> None:
+    if pos in positions:
+        return positions.remove(pos)
+    else:
+        positions.add(pos)
+        
+
+def writeToController(command) -> None:
+    command_list = [command]
+    controller.write(json.dumps(command_list).encode())
+    
+
+def drawWindow() -> None:
+    for ball in ball_positions:
+        pg.draw.circle(screen, BALL_COLOR, ball, BALL_RADIUS)
+    
+    pg.display.update()
 
 
-def clear_display() -> None:
-    controller.write("c\n".encode()) 
+def runWritingThread(command) -> threading.Thread:
+    thread = threading.Thread(target=writeToController(command))
+    thread.start()
+    return thread
 
 
-timer = 0
+thread_running = False
 while 1:
     for event in pg.event.get():
         if event.type == pg.QUIT:
-            exit()
+          exit()
         if event.type == pg.KEYDOWN:
             if event.key == pg.K_c:
                 ball_positions = set()
-                clear_display()
+                thread = runWritingThread('c')
+                thread_running = True
     
     if pg.mouse.get_pressed()[0]:
         pos = pg.mouse.get_pos()
-        if pos not in ball_positions:
-            ball_positions.add(pos)
-        else:
-            ball_positions.remove(pos)
+        updatePositions(pos, ball_positions) #Update PyGame pos list
+        thread = runWritingThread(pos) #Write the new pos to the controller
+        thread_running = True
 
-    if timer >=180: #Makes the write commands less frequent    
-        if len(ball_positions) > 0:
-            write_positions(ball_positions)
-        timer = 0
+
+    if thread_running: #Wait for writing thread to finish
+      thread.join()
+      thread_running = False
+
 
     clock.tick(FPS)
     screen.fill(BLACK)
-    timer += 1
-
+    drawWindow()
+    
+  
